@@ -1022,6 +1022,8 @@ async function startWebAR() {
     const _compensatedQuat = new THREE.Quaternion();
     const _tempV = new THREE.Vector3();
     const _tempQ = new THREE.Quaternion();
+    const _zeroRollEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    const _cleanWorldQuat = new THREE.Quaternion();
     let lastOpticalBeta = 0;
     let lastOpticalAlpha = 0;
     let lastOpticalGamma = 0;
@@ -1149,7 +1151,15 @@ async function startWebAR() {
           }
           // In anchor local space, hinge is pinned strictly to the top edge (halfH - HINGE_TUCK)
           cardRoot.position.set(0, targetHalfH - HINGE_TUCK, 0);
-          cardRoot.quaternion.identity();
+
+          // Zero-Roll Horizon Constraint:
+          // Extract pitch (X) and yaw (Y) from target anchor, but enforce roll (Z) = 0 in YXZ order.
+          // This keeps the hinge axis strictly parallel to the horizon/desk plane, eliminating diagonal tilt.
+          _zeroRollEuler.setFromQuaternion(targetAnchor.group.quaternion, 'YXZ');
+          _zeroRollEuler.z = 0;
+          _cleanWorldQuat.setFromEuler(_zeroRollEuler);
+          cardRoot.quaternion.copy(targetAnchor.group.quaternion).invert().multiply(_cleanWorldQuat);
+
           cardRoot.scale.set(1, 1, 1);
           cardRoot.updateMatrixWorld(true);
 
@@ -1279,8 +1289,12 @@ async function startWebAR() {
               _compensatedPos.copy(lastOpticalWorldPos).applyQuaternion(qComp);
               _compensatedQuat.copy(lastOpticalWorldQuat).premultiply(qComp);
 
+              // Maintain Zero-Roll Horizon Constraint during gyroscope vertical compensation
+              _zeroRollEuler.setFromQuaternion(_compensatedQuat, 'YXZ');
+              _zeroRollEuler.z = 0;
+
               cardRoot.position.copy(_compensatedPos);
-              cardRoot.quaternion.copy(_compensatedQuat);
+              cardRoot.quaternion.setFromEuler(_zeroRollEuler);
               cardRoot.updateMatrixWorld(true);
             }
           }
